@@ -52,6 +52,7 @@ def main(app_data):
         
         st.sidebar.subheader('Interval:')
         interval = st.sidebar.selectbox('', ('5 Minute', '15 Minute', '30 Minute', '1 Hour', '1 Day', '1 Week'), index = 4)
+        print selected intervel, intervel
         volitility_index = 0     
 
     elif asset in ['Cryptocurrency']:
