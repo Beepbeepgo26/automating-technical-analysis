@@ -73,8 +73,12 @@ class SVM_Prediction(Preprocessing):
         self.indication = indication
         indicators = {'Analysed':'Distinct_Action', 'Predicted':'Action_Predictions'}
 
-        action_prediction_length = self.model_prediction_action.shape[0]
-        self.df_visualization = self.df.iloc[-action_prediction_length:].copy()
+        features = ['High', 'Low', 'Open', 'Volume', 'Adj Close', 'P', 'R1', 'R2', 'R3', 'S1', 'S2', 'S3',
+            'OBV', 'MACD', 'MACDS', 'MACDH', 'SMA', 'LMA', 'SEMA', 'LEMA', 'RSI', 'SR_K', 'SR_D',
+            'SR_RSI_K', 'SR_RSI_D', 'ATR', 'HL_PCT', 'PCT_CHG']
+
+        # Clean the DataFrame in the same way as in get_prediction to ensure data alignment
+        self.df_visualization = self.df.dropna(subset=features).copy()
         self.df_visualization['Action_Predictions'] = self.model_prediction_action
 
         self.df_visualization = self.df_visualization[['Open', 'Adj Close', 'Volume', 'Distinct_Action', 'Action_Predictions']]
@@ -85,4 +89,4 @@ class SVM_Prediction(Preprocessing):
         self.df_visualization['Bullish Volume'] = self.df_visualization[self.df_visualization['Adj Close'] >= self.df_visualization['Open']]['Volume']
         self.df_visualization['Bearish Volume'] = self.df_visualization[self.df_visualization['Adj Close'] < self.df_visualization['Open']]['Volume']
 
-        self.df_visualization_technical = self.df[['OBV', 'MACD', 'MACDS', 'MACDH', 'RSI', 'SR_K', 'SR_D', 'SR_RSI_K', 'SR_RSI_D', 'ATR']]
+        self.df_visualization_technical = self.df.dropna(subset=features)[['OBV', 'MACD', 'MACDS', 'MACDH', 'RSI', 'SR_K', 'SR_D', 'SR_RSI_K', 'SR_RSI_D', 'ATR']]
