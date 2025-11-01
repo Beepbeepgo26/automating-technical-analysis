@@ -1,9 +1,13 @@
 from app.data_sourcing import Data_Sourcing, data_update
 from app.indicator_analysis import Indications
 from app.graph import Visualization
+from app.svm_graph import SVM_Visualization
+from app.svm_model import SVM_Prediction
 from tensorflow.keras.models import load_model
 import streamlit as st 
 import gc
+import os
+import pickle
 
 gc.collect()
 #data_update()
@@ -15,6 +19,11 @@ def main(app_data):
     st.sidebar.subheader('Asset:')
     asset_options = sorted(['Cryptocurrency', 'Index Fund', 'Forex', 'Futures & Commodities', 'Stocks'])
     asset = st.sidebar.selectbox('', asset_options, index = 4)
+
+    st.sidebar.subheader('Model:')
+    model_options = sorted(['Keras', 'SVM'])
+    model_selection = st.sidebar.selectbox('', model_options, index = 0)
+
 
     if asset in ['Index Fund', 'Forex', 'Futures & Commodities', 'Stocks']:
         exchange = 'Yahoo! Finance'
@@ -82,13 +91,33 @@ def main(app_data):
     st.subheader(f'{label} Data Sourced from {exchange}.')
     st.info(f'Predicting...')
     
-    future_price = 1   
-    analysis = Visualization(exchange, interval, equity, indication, action_model, price_model, market)
+    future_price = 1
+
+    if model_selection == 'Keras':
+        action_model = load_model("models/action_prediction_model.h5")
+        price_model = load_model("models/price_prediction_model.h5")
+        analysis = Visualization(exchange, interval, equity, indication, action_model, price_model, market)
+        requested_prediction_price = float(analysis.requested_prediction_price)
+        score_price = analysis.score_price
+    else:
+        svm_model_path = 'models/svm_action_prediction_model.pkl'
+        if not os.path.exists(svm_model_path):
+            st.info("Training SVM model...")
+            svm_model = SVM_Prediction(exchange, interval, equity, market)
+            svm_model.train_model()
+            st.info("SVM model trained and saved.")
+
+        analysis = SVM_Visualization(exchange, interval, equity, indication, market)
+        analysis.load_model(svm_model_path)
+        analysis.get_prediction()
+        requested_prediction_price = 0  # No price prediction with SVM
+        score_price = 0
+
+
     analysis_day = Indications(exchange, '1 Day', equity, market)
     requested_date = analysis.df.index[-1]
     current_price = float(analysis.df['Adj Close'][-1])
     change = float(analysis.df['Adj Close'].pct_change()[-1]) * 100
-    requested_prediction_price = float(analysis.requested_prediction_price)
     requested_prediction_action = analysis.requested_prediction_action
 
     risks = {'Low': [analysis_day.df['S1'].values[-1], analysis_day.df['R1'].values[-1]], 
@@ -106,23 +135,23 @@ def main(app_data):
 
     if exchange == 'Yahoo! Finance':
         current_price = f'{float(current_price):,.2f}'
-        requested_prediction_price = f'{float(requested_prediction_price):,.2f}'
+        requested_prediction_price_display = f'{float(requested_prediction_price):,.2f}' if model_selection == 'Keras' else 'N/A'
         buy_price = f'{float(buy_price):,.2f}'
         sell_price = f'{float(sell_price):,.2f}'
     else:
         current_price = f'{float(current_price):,.8f}'
-        requested_prediction_price = f'{float(requested_prediction_price):,.8f}'
+        requested_prediction_price_display = f'{float(requested_prediction_price):,.8f}' if model_selection == 'Keras' else 'N/A'
         buy_price = f'{float(buy_price):,.8f}'
         sell_price = f'{float(sell_price):,.8f}'
 
-    if analysis.requested_prediction_action == 'Hold':
+    if requested_prediction_action == 'Hold':
         present_statement_prefix = 'off from taking any action with'
         present_statement_suffix = ' at this time'
     else:
         present_statement_prefix = ''
         present_statement_suffix = ''
                 
-    accuracy_threshold = {analysis.score_action: 75., analysis.score_price: 75.}
+    accuracy_threshold = {analysis.score_action: 75., score_price: 75.}
     confidence = dict()
     for score, threshold in accuracy_threshold.items():
         if float(score) >= threshold:
@@ -142,7 +171,8 @@ def main(app_data):
     st.markdown(f'**Current Price:** {currency} {current_price}.')
     st.markdown(f'**{interval} Price Change:** {change_display}.')
     st.markdown(f'**Recommended Trading Action:** You should **{requested_prediction_action.lower()}** {present_statement_prefix} this {label.lower()[:6]}{present_statement_suffix}. {str(confidence[analysis.score_action])}')
-    st.markdown(f'**Estimated Forecast Price:** The {label.lower()[:6]} {asset_suffix} for **{equity}** is estimated to be **{currency} {requested_prediction_price}** in the next **{forcast_prefix} {forcast_suffix}**. {str(confidence[analysis.score_price])}')
+    if model_selection == 'Keras':
+        st.markdown(f'**Estimated Forecast Price:** The {label.lower()[:6]} {asset_suffix} for **{equity}** is estimated to be **{currency} {requested_prediction_price_display}** in the next **{forcast_prefix} {forcast_suffix}**. {str(confidence[score_price])}')
     if requested_prediction_action == 'Hold':
         st.markdown(f'**Recommended Trading Margins:** You should consider buying more **{equity}** {label.lower()[:6]} at **{currency} {buy_price}** and sell it at **{currency} {sell_price}**.')
 
@@ -160,7 +190,5 @@ if __name__ == '__main__':
     import gc
     warnings.filterwarnings("ignore") 
     gc.collect()
-    action_model = load_model("models/action_prediction_model.h5")
-    price_model = load_model("models/price_prediction_model.h5")
     app_data = Data_Sourcing()
     main(app_data = app_data)
