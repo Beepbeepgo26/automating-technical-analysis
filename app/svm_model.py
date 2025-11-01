@@ -5,29 +5,47 @@ from sklearn.metrics import accuracy_score
 from app.scaling import Preprocessing
 import pickle
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 class SVM_Prediction(Preprocessing):
 
     def __init__(self, exchange, interval, asset, market = None):
         super().__init__(exchange, interval, asset, market)
         self.model = SVC(kernel = 'rbf', C = 1.0, random_state = 42)
+        self.scaler = StandardScaler()
 
     def train_model(self):
         features = ['High', 'Low', 'Open', 'Volume', 'Adj Close', 'P', 'R1', 'R2', 'R3', 'S1', 'S2', 'S3',
                     'OBV', 'MACD', 'MACDS', 'MACDH', 'SMA', 'LMA', 'SEMA', 'LEMA', 'RSI', 'SR_K', 'SR_D',
                     'SR_RSI_K', 'SR_RSI_D', 'ATR', 'HL_PCT', 'PCT_CHG']
 
-        df_action = self.df.copy()[features + ['Distinct_Action']]
-        action_features, action_labels = super().scaling(df_action)
+        df_action = self.df.copy()[features + ['Distinct_Action']].dropna()
 
-        X_train, X_test, y_train, y_test = train_test_split(action_features, action_labels, test_size=0.2, random_state=42)
+        X = df_action[features].values
+        y = df_action['Distinct_Action'].values
 
-        self.model.fit(X_train, y_train.ravel())
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-        y_pred = self.model.predict(X_test)
-        self.score_action = accuracy_score(y_test, y_pred)
+        self.scaler.fit(X_train)
+
+        X_train_scaled = self.scaler.transform(X_train)
+        X_test_scaled = self.scaler.transform(X_test)
+
+        self.model.fit(X_train_scaled, y_train)
+
+        y_pred = self.model.predict(X_test_scaled)
+        self.score_action = accuracy_score(y_test, y_pred) * 100
 
         self.save_model('models/svm_action_prediction_model.pkl')
+        self.save_scaler('models/svm_scaler.pkl')
+
+    def save_scaler(self, filepath):
+        with open(filepath, 'wb') as f:
+            pickle.dump(self.scaler, f)
+
+    def load_scaler(self, filepath):
+        with open(filepath, 'rb') as f:
+            self.scaler = pickle.load(f)
 
     def save_model(self, filepath):
         with open(filepath, 'wb') as f:
@@ -38,14 +56,16 @@ class SVM_Prediction(Preprocessing):
             self.model = pickle.load(f)
 
     def get_prediction(self):
+        self.load_scaler('models/svm_scaler.pkl')
         features = ['High', 'Low', 'Open', 'Volume', 'Adj Close', 'P', 'R1', 'R2', 'R3', 'S1', 'S2', 'S3',
                     'OBV', 'MACD', 'MACDS', 'MACDH', 'SMA', 'LMA', 'SEMA', 'LEMA', 'RSI', 'SR_K', 'SR_D',
                     'SR_RSI_K', 'SR_RSI_D', 'ATR', 'HL_PCT', 'PCT_CHG']
 
         df_action = self.df.copy()[features]
-        action_features, _ = super().scaling(df_action)
 
-        self.model_prediction_action = self.model.predict(action_features)
+        X_pred = self.scaler.transform(df_action.values)
+
+        self.model_prediction_action = self.model.predict(X_pred)
         self.requested_prediction_action = self.model_prediction_action[-1]
 
     def prediction_postprocessing(self, indication):
