@@ -56,12 +56,13 @@ class SVM_Prediction(Preprocessing):
             self.model = pickle.load(f)
 
     def get_prediction(self):
+        self.load_model('models/svm_action_prediction_model.pkl')
         self.load_scaler('models/svm_scaler.pkl')
         features = ['High', 'Low', 'Open', 'Volume', 'Adj Close', 'P', 'R1', 'R2', 'R3', 'S1', 'S2', 'S3',
                     'OBV', 'MACD', 'MACDS', 'MACDH', 'SMA', 'LMA', 'SEMA', 'LEMA', 'RSI', 'SR_K', 'SR_D',
                     'SR_RSI_K', 'SR_RSI_D', 'ATR', 'HL_PCT', 'PCT_CHG']
 
-        df_action = self.df.copy()[features]
+        df_action = self.df.copy()[features].dropna()
 
         X_pred = self.scaler.transform(df_action.values)
 
